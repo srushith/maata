@@ -79,6 +79,13 @@ A few seconds later your text appears in the window. Turn on **Paste into the wi
 - **Pin on top**, copy, clear and a word count.
 - Recordings up to **13 minutes**.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/history-dark.png">
+    <img src="docs/history-light.png" width="340" alt="The History window with recent transcripts and Copy buttons">
+  </picture>
+</p>
+
 ---
 
 ## 💰 Cost
