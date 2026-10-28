@@ -1,0 +1,7 @@
+PyQt5
+sounddevice
+numpy
+openai
+pyperclip
+pywin32
+python-dotenv
