@@ -12,16 +12,21 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import QElapsedTimer, QSize, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtNetwork import QLocalServer, QLocalSocket
 
+import history
 import settings
 import recorder
+import sounds
 import theme
+import updater
+from version import RELEASES_URL, __version__
 from theme import COLORS
+from history_dialog import HistoryDialog
 from hotkey import MOD_NOREPEAT, get_hotkey_candidates
 from overlay import RecordingPill
 from settings_dialog import SettingsDialog
 from transcriber_api import clean_up, transcribe_audio
 from typer import get_foreground_window, is_paste_target, paste_text
-from widgets import RecordButton, ToggleSwitch, make_icon, make_pin_icon
+from widgets import RecordButton, ToggleSwitch, make_history_icon, make_icon, make_pin_icon
 
 APP_ID = "Maata.App"  # lets Windows show our own taskbar icon instead of Python's
 HOTKEY_ID = 1
@@ -29,6 +34,7 @@ CANCEL_ID = 2  # Esc, only registered while recording
 WM_HOTKEY = 0x0312
 VK_ESCAPE = 0x1B
 MAX_SECONDS = 13 * 60  # OpenAI's 25 MB limit is about 13.5 minutes at 16 kHz
+UPDATE_CHECK_MS = 24 * 60 * 60 * 1000  # check GitHub for a new version once a day
 
 user32 = ctypes.windll.user32
 
@@ -53,6 +59,18 @@ class PasteWorker(QThread):
             self.done.emit(f"Paste failed: {e}")
 
 
+class UpdateChecker(QThread):
+    found = pyqtSignal(str, str)  # (version, url)
+
+    def run(self):
+        try:
+            version, url = updater.latest_release()
+        except Exception:
+            return  # offline or GitHub unreachable: try again later
+        if updater.is_newer(version):
+            self.found.emit(version, url)
+
+
 class Worker(QThread):
     """Records (unless retrying a saved recording), transcribes and tidies up."""
     stage = pyqtSignal(str)
@@ -64,11 +82,13 @@ class Worker(QThread):
         self.mic_name = mic_name
         self.record = record
         self.cancelled = False
+        self.trimmed = 0.0  # seconds of silence cut out before uploading
 
     def run(self):
         if self.record:
             try:
-                recorder.record_audio(self.filename, self.mic_name)
+                self.trimmed = recorder.record_audio(
+                    self.filename, self.mic_name, trim=settings.get_bool(settings.TRIM_SILENCE))
             except Exception as e:
                 recorder.delete_recording(self.filename)
                 self.finished.emit("", "" if self.cancelled else str(e), False, "")
@@ -117,6 +137,9 @@ class MaataUI(QWidget):
         self.cancel_key_registered = False
         self.hotkey_label = ""
         self.pending_file = None        # a recording that failed to transcribe
+        self.update_checker = None
+        self.announced_version = None
+        self.done_hint = None
         self.elapsed = QElapsedTimer()
 
         self.icons = {
@@ -142,6 +165,12 @@ class MaataUI(QWidget):
         # Updates the recording timer and mic level.
         self.record_timer = QTimer(self)
         self.record_timer.timeout.connect(self.update_recording_status)
+
+        # Check GitHub for a newer version shortly after start, then daily.
+        self.update_timer = QTimer(self)
+        self.update_timer.timeout.connect(self.check_for_updates)
+        self.update_timer.start(UPDATE_CHECK_MS)
+        QTimer.singleShot(8000, self.check_for_updates)
 
         problem = self.register_hotkey()
         self.set_state("idle")
@@ -183,6 +212,14 @@ class MaataUI(QWidget):
         self.pin_button.toggled.connect(self.set_on_top)
         self.update_pin_tooltip()
 
+        self.history_button = QToolButton()
+        self.history_button.setObjectName("icon")
+        self.history_button.setIcon(make_history_icon(COLORS["muted"]))
+        self.history_button.setIconSize(QSize(20, 20))
+        self.history_button.setToolTip("History")
+        self.history_button.setCursor(Qt.PointingHandCursor)
+        self.history_button.clicked.connect(self.open_history)
+
         self.settings_button = QToolButton()
         self.settings_button.setObjectName("icon")
         self.settings_button.setText("⚙")
@@ -194,7 +231,16 @@ class MaataUI(QWidget):
         header.addWidget(title)
         header.addStretch()
         header.addWidget(self.pin_button)
+        header.addWidget(self.history_button)
         header.addWidget(self.settings_button)
+
+        # Shown when a newer version is on GitHub.
+        self.update_banner = QLabel()
+        self.update_banner.setObjectName("banner")
+        self.update_banner.setOpenExternalLinks(True)
+        self.update_banner.setAlignment(Qt.AlignCenter)
+        self.update_banner.setWordWrap(True)
+        self.update_banner.hide()
 
         # Record button and status
         self.record_button = RecordButton()
@@ -282,6 +328,7 @@ class MaataUI(QWidget):
         layout.setContentsMargins(20, 14, 20, 18)
         layout.setSpacing(0)
         layout.addLayout(header)
+        layout.addWidget(self.update_banner)
         layout.addSpacing(10)
         layout.addWidget(self.record_button, alignment=Qt.AlignHCenter)
         layout.addSpacing(6)
@@ -407,9 +454,12 @@ class MaataUI(QWidget):
         show_action.triggered.connect(self.show_window)
         settings_action = QAction("Settings...", self)
         settings_action.triggered.connect(self.open_settings)
+        history_action = QAction("History...", self)
+        history_action.triggered.connect(self.open_history)
         quit_action = QAction("Quit", self)
         quit_action.triggered.connect(self.quit_app)
-        for action in (self.record_action, self.retry_action, show_action, settings_action):
+        for action in (self.record_action, self.retry_action, show_action, history_action,
+                       settings_action):
             menu.addAction(action)
         menu.addSeparator()
         menu.addAction(quit_action)
@@ -527,11 +577,49 @@ class MaataUI(QWidget):
                 values[settings.HOTKEY] = old_hotkey
                 QMessageBox.warning(self, "Maata", problem)
         settings.save(values)
+        if not settings.get_bool(settings.HISTORY):
+            history.clear()
+        if settings.get_bool(settings.CHECK_UPDATES):
+            self.check_for_updates()
+        else:
+            self.update_banner.hide()
         self.set_state("idle", "Settings saved")
         QTimer.singleShot(2000, lambda: self.is_idle() and self.set_state("idle"))
 
     def is_idle(self):
         return not self.is_recording and not self.is_processing
+
+    def open_history(self):
+        if not self.isVisible():
+            self.show_window()
+        HistoryDialog(self).exec_()
+
+    # ---- Updates and sounds ---------------------------------------------
+
+    def check_for_updates(self):
+        if not settings.get_bool(settings.CHECK_UPDATES):
+            return
+        if self.update_checker and self.update_checker.isRunning():
+            return
+        self.update_checker = UpdateChecker()
+        self.update_checker.found.connect(self.on_update_found)
+        self.update_checker.start()
+
+    def on_update_found(self, version, url):
+        if not url.startswith("https://github.com/"):
+            url = RELEASES_URL
+        self.update_banner.setText(
+            f'Maata {version} is available (you have {__version__}). '
+            f'<a style="color:{COLORS["accent"]}" href="{url}">Download</a>')
+        self.update_banner.show()
+        if self.tray and self.announced_version != version:
+            self.announced_version = version
+            self.tray.showMessage("Maata update", f"Maata {version} is available. "
+                                  "Open Maata to download it.", self.icons["idle"], 6000)
+
+    def play_sound(self, name):
+        if settings.get_bool(settings.SOUNDS):
+            sounds.play(name)
 
     # ---- Target window tracking -----------------------------------------
 
@@ -560,6 +648,7 @@ class MaataUI(QWidget):
             self.open_settings()
             return
         self.target_hwnd = self.current_target_window()
+        self.play_sound("start")
         self.is_recording = True
         self.elapsed.start()
         self.set_state("recording")
@@ -603,6 +692,7 @@ class MaataUI(QWidget):
         self.is_processing = True
         self.record_timer.stop()
         self.release_cancel_key()
+        self.play_sound("stop")
         self.set_state("processing", hint=hint)
         self.pill.show_processing()
         try:
@@ -620,6 +710,7 @@ class MaataUI(QWidget):
         self.release_cancel_key()
         recorder.stop_recording()
         self.worker.wait(3000)  # let the mic close before anything else starts
+        self.play_sound("cancel")
         self.pill.hide_pill()
         self.set_state("idle", "Cancelled")
         QTimer.singleShot(1500, lambda: self.is_idle() and self.status.text() == "Cancelled"
@@ -653,8 +744,12 @@ class MaataUI(QWidget):
 
         if retried:
             self.pending_file = None
+        if settings.get_bool(settings.HISTORY):
+            history.add(text)
         self.text_box.setPlainText(text)
-        self.set_state("idle", "Done")
+        self.done_hint = (f"Skipped {round(worker.trimmed)} s of pauses, so it cost less."
+                          if worker is not None and worker.trimmed >= 2 else None)
+        self.set_state("idle", "Done", hint=self.done_hint)
         if note:
             self.set_hint(note, error=True)
 
@@ -674,7 +769,7 @@ class MaataUI(QWidget):
 
     def on_pasted(self, message, note=""):
         if message.startswith("Pasted"):
-            self.set_state("idle", "Pasted")
+            self.set_state("idle", "Pasted", hint=self.done_hint)
             if note:
                 self.set_hint(note, error=True)
             self.pill.show_done("Pasted")

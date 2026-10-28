@@ -67,6 +67,10 @@ A few seconds later your text appears in the window. Turn on **Paste into the wi
 - **Floating recording bar** at the bottom of the screen with a timer and voice level, plus stop and cancel buttons. It never steals focus from the app you're typing in.
 - **Never lose a recording.** If the internet or OpenAI fails, the audio is kept and you can click **Retry**, even after restarting Maata.
 - **Esc cancels** a recording you don't want, so it isn't sent or billed.
+- **Skips long pauses** before uploading, so you don't pay for silence while you think.
+- **History** of your last 10 transcripts, so you can copy an earlier one again. It's kept only on your PC.
+- **Start and stop sounds**, so you know it heard the shortcut without looking.
+- **Update notice** when a new version is out.
 - **Accurate.** Uses OpenAI's GPT-4o transcription models and handles 50+ languages, including Hindi, Telugu, Tamil and more.
 - **Custom words.** Teach it names and jargon so they're spelled right.
 - **Lives in the tray.** The icon turns blue when ready, red while listening and amber while transcribing.
@@ -101,7 +105,7 @@ Maata itself is **free**. You only pay OpenAI for the audio you transcribe, bill
 *Monthly figures assume 22 workdays. Prices checked October 2026; see [OpenAI pricing](https://openai.com/api/pricing/) for current rates.*
 
 **Keeping costs down:**
-- Stop recording when you finish talking, because silence is billed like speech.
+- Leave **Skip long pauses** on (the default). Silence is billed like speech, so Maata cuts long pauses out before uploading. It still helps to stop recording when you finish talking.
 - Stay on the default model. It's half the price and very accurate.
 - Set a monthly budget in your OpenAI account under **Settings → Limits** so there are never surprises. A single recording can't exceed 13 minutes, about $0.04.
 
@@ -119,8 +123,12 @@ Click **⚙** in the window, or right-click the tray icon and choose **Settings.
 | **Language** | Set it if you always speak one language, for better accuracy. Default: detect automatically |
 | **Model** | GPT-4o mini (default), GPT-4o or Whisper |
 | **Custom words** | Names or terms to spell correctly, e.g. `Kubernetes, Priya, Hyderabad` |
+| **Sounds** | A soft sound when recording starts and stops. Default: on |
+| **Skip long pauses** | Cuts pauses longer than about half a second before uploading, which makes it cheaper. Default: on |
+| **History** | Remembers your last 10 transcripts on this PC. Turning it off deletes the saved ones. Default: on |
+| **Update notice** | Tells you when a new version is on GitHub. Default: on |
 
-In the main window, the **📌** pin keeps it above other windows, and the two switches turn auto-paste and AI cleanup on or off.
+In the main window, the **📌** pin keeps it above other windows, the **🕘** clock button opens your History, and the two switches turn auto-paste and AI cleanup on or off.
 
 <details>
 <summary>Why Win + Alt + Space?</summary>
@@ -143,7 +151,8 @@ If it's taken on your PC, Maata uses **Ctrl + Win + Alt + Space** instead and te
 
 - Your recording goes **directly from your PC to OpenAI** to be transcribed. There's no other server in between.
 - Your API key and settings are stored only on your PC, in `%APPDATA%\Maata\settings.env`.
-- Maata has no analytics, tracking or accounts.
+- Your last 10 transcripts are saved only on your PC, in `%APPDATA%\Maata\history.json`. You can clear them in **History**, or turn history off in Settings.
+- Maata has no analytics, tracking or accounts. The only other connection it makes is a once-a-day check with GitHub for a newer version, which sends nothing about you. You can turn that off in Settings.
 - OpenAI's API doesn't use your audio to train its models by default. See [OpenAI's data policy](https://openai.com/enterprise-privacy/).
 
 ---
@@ -167,7 +176,7 @@ If it's taken on your PC, Maata uses **Ctrl + Win + Alt + Space** instead and te
 
 1. Right-click the tray icon and choose **Quit**.
 2. Delete `Maata.exe`.
-3. Optionally, delete your saved settings: press **Win + R**, type `%APPDATA%\Maata`, and delete that folder.
+3. Optionally, delete your saved settings and history: press **Win + R**, type `%APPDATA%\Maata`, and delete that folder.
 
 ---
 
@@ -182,6 +191,7 @@ Hotkey ──► record mic (16 kHz) ──► OpenAI transcription ──► op
 - **Hotkey:** registered with the Windows `RegisterHotKey` API, so no keyboard hooks are needed.
 - **Audio:** recorded at 16 kHz, 16-bit mono, which is what speech models use. That's about 5× smaller than CD quality, so uploads are fast and 13 minutes fits under OpenAI's 25 MB limit.
 - **Cleanup:** an optional pass through GPT-4o mini with instructions to tidy the text without changing its meaning, or answering anything in it.
+- **Skipping pauses:** the audio is split into 30 ms slices. Slices well above the room's background level count as speech, and pauses are shortened to about 0.2 s while keeping a quarter second around every word.
 - **Reliability:** each recording is saved to `%TEMP%\Maata` and deleted once transcribed, so a failed one can be retried. Only one copy of Maata runs at a time.
 - **Pasting:** the app remembers the window you were in, switches back to it, presses Ctrl+V and then restores your clipboard.
 
@@ -221,8 +231,11 @@ The output is `dist\Maata.exe`, a single file with no Python needed on the targe
 | `settings_dialog.py` | Settings window |
 | `settings.py` | Loads and saves settings (`.env` from source, `%APPDATA%` for the .exe) |
 | `hotkey.py` | Hotkey parsing and defaults |
-| `recorder.py` | Microphone recording |
+| `recorder.py` | Microphone recording and pause trimming |
 | `transcriber_api.py` | OpenAI transcription (with language and custom-word hints) and AI cleanup |
+| `history.py`, `history_dialog.py` | Saves the last 10 transcripts and shows the History window |
+| `sounds.py` | Start, stop and cancel sounds |
+| `updater.py`, `version.py` | Version number and the check for new releases |
 | `typer.py` | Switches to the target window, pastes and restores the clipboard |
 | `main.spec`, `version_info.txt` | PyInstaller build settings |
 | `assets/icon.ico` | App icon |

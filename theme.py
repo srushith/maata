@@ -75,6 +75,14 @@ def stylesheet():
     QLabel#title {{ font-size: 15px; font-weight: 600; }}
     QLabel#status {{ font-size: 18px; font-weight: 600; }}
     QLabel#hint {{ font-size: 12px; color: {c['muted']}; }}
+    QLabel#banner {{
+        background: {c['surface']};
+        border: 1px solid {c['accent']};
+        border-radius: 8px;
+        padding: 6px 10px;
+        margin-top: 8px;
+        font-size: 12px;
+    }}
     QLabel#hint[error="true"] {{ color: {c['error']}; }}
     QLabel#count, QLabel#formHint {{ font-size: 11px; color: {c['muted']}; }}
     QLabel#formError {{ color: {c['error']}; }}
@@ -84,6 +92,12 @@ def stylesheet():
         border: 1px solid {c['border']};
         border-radius: 12px;
     }}
+    QScrollArea#historyScroll, QWidget#historyList {{ background: transparent; }}
+    QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
+    QScrollBar::handle:vertical {{ background: {c['border']}; border-radius: 3px; min-height: 30px; }}
+    QScrollBar::handle:vertical:hover {{ background: {c['muted']}; }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
     QFrame#divider {{ background: {c['border']}; max-height: 1px; border: none; }}
 
     QPlainTextEdit {{

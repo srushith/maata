@@ -76,8 +76,55 @@ def begin_recording():
     is_recording = True
 
 
-def record_audio(filename, mic_name=""):
-    """Record until stop_recording() is called. Call begin_recording() first."""
+def trim_silence(data, rate=fs):
+    """Shorten long pauses, since OpenAI bills silence like speech.
+
+    Keeps about a quarter second around speech so no words are clipped.
+    Returns (audio, seconds removed). Leaves the audio alone if it can't
+    tell speech from silence.
+    """
+    frame = int(rate * 0.03)
+    count = len(data) // frame
+    if count < 20:
+        return data, 0.0
+    frames = data[:count * frame].astype(np.float32).reshape(count, frame)
+    db = 20 * np.log10(np.sqrt(np.mean(frames ** 2, axis=1)) / 32768.0 + 1e-10)
+
+    # Silence is the quiet background level; speech is clearly louder than it.
+    floor = np.percentile(db, 10)
+    threshold = min(floor + 10, -38)
+    speech = db > threshold
+    if speech.sum() * 0.03 < 0.5:
+        return data, 0.0  # barely any speech found: don't risk cutting it
+
+    pad = 8  # frames (about 0.25 s) kept either side of speech
+    keep = np.convolve(speech, np.ones(2 * pad + 1), mode="same") > 0
+
+    # Inside the recording, keep a short gap so words don't run together.
+    gap = 6  # about 0.2 s
+    first, last = np.argmax(keep), count - 1 - np.argmax(keep[::-1])
+    i = first
+    while i <= last:
+        if not keep[i]:
+            j = i
+            while j <= last and not keep[j]:
+                j += 1
+            keep[i:min(i + gap, j)] = True
+            i = j
+        i += 1
+
+    trimmed = frames[keep].astype(np.int16).reshape(-1)
+    removed = (len(data) - len(trimmed)) / rate
+    if removed < 1.0:
+        return data, 0.0  # not worth changing
+    return trimmed, removed
+
+
+def record_audio(filename, mic_name="", trim=False):
+    """Record until stop_recording() is called. Call begin_recording() first.
+
+    Returns the seconds of silence that were cut out.
+    """
     global current_level
     current_level = 0.0
     recording = []
@@ -99,13 +146,16 @@ def record_audio(filename, mic_name=""):
     if not recording:
         raise ValueError("No audio was captured. Try recording for a bit longer.")
 
-    data = np.concatenate(recording, axis=0)
+    data = np.concatenate(recording, axis=0).reshape(-1)
+    removed = 0.0
+    if trim:
+        data, removed = trim_silence(data)
     with wave.open(filename, "wb") as f:
         f.setnchannels(1)
         f.setsampwidth(2)  # 16-bit
         f.setframerate(fs)
-        f.writeframes(data.tobytes())
-    return filename
+        f.writeframes(data.astype(np.int16).tobytes())
+    return removed
 
 
 def stop_recording():

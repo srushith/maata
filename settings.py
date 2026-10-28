@@ -29,6 +29,10 @@ VOCABULARY = "MAATA_VOCABULARY"
 AUTOPASTE = "MAATA_AUTOPASTE"
 ON_TOP = "MAATA_ON_TOP"
 CLEANUP = "MAATA_CLEANUP"
+SOUNDS = "MAATA_SOUNDS"
+TRIM_SILENCE = "MAATA_TRIM_SILENCE"
+HISTORY = "MAATA_HISTORY"
+CHECK_UPDATES = "MAATA_CHECK_UPDATES"
 
 DEFAULTS = {
     HOTKEY: "win+alt+space",
@@ -39,6 +43,10 @@ DEFAULTS = {
     AUTOPASTE: "false",
     ON_TOP: "true",    # keep the window above other windows
     CLEANUP: "false",  # tidy the text with AI: filler words, punctuation, lists
+    SOUNDS: "true",         # soft sound when recording starts and stops
+    TRIM_SILENCE: "true",   # cut long pauses before uploading (cheaper)
+    HISTORY: "true",        # remember the last 10 transcripts on this PC
+    CHECK_UPDATES: "true",  # tell me when a new version is on GitHub
 }
 
 # (model id, description shown in Settings)

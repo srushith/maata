@@ -190,3 +190,25 @@ class ToggleSwitch(QCheckBox):
         text_rect = self.rect().adjusted(self.TRACK_W + 10, 0, 0, 0)
         p.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, self.text())
         p.end()
+
+
+def make_history_icon(color, size=20):
+    """Clock with a small back-arrow, for the History button."""
+    pixmap = QPixmap(size * 2, size * 2)
+    pixmap.setDevicePixelRatio(2)
+    pixmap.fill(Qt.transparent)
+    p = QPainter(pixmap)
+    p.setRenderHint(QPainter.Antialiasing)
+    col = QColor(color)
+    c = size / 2
+    p.setPen(QPen(col, 1.7, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    p.setBrush(Qt.NoBrush)
+    r = size * 0.36
+    p.drawArc(QRectF(c - r, c - r, 2 * r, 2 * r), 120 * 16, 300 * 16)  # open circle
+    p.drawLine(QPointF(c, c - r * 0.55), QPointF(c, c))                  # hour hand
+    p.drawLine(QPointF(c, c), QPointF(c + r * 0.45, c + r * 0.3))         # minute hand
+    ax, ay = c - r * 0.5, c - r * 0.87                                     # arrow head
+    p.drawLine(QPointF(ax, ay), QPointF(ax - 3, ay - 0.5))
+    p.drawLine(QPointF(ax, ay), QPointF(ax + 0.5, ay + 3))
+    p.end()
+    return QIcon(pixmap)

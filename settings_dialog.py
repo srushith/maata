@@ -7,6 +7,7 @@ import settings
 import theme
 from hotkey import parse_hotkey
 from recorder import list_microphones
+from widgets import ToggleSwitch
 
 
 class SettingsDialog(QDialog):
@@ -77,6 +78,22 @@ class SettingsDialog(QDialog):
         vocab_hint.setObjectName("formHint")
         form.addRow("", vocab_hint)
 
+        # On/off options
+        self.switches = {}
+        options = QVBoxLayout()
+        options.setSpacing(6)
+        for key, label in (
+            (settings.SOUNDS, "Play a sound when recording starts and stops"),
+            (settings.TRIM_SILENCE, "Skip long pauses before uploading (cheaper)"),
+            (settings.HISTORY, "Remember my last 10 transcripts"),
+            (settings.CHECK_UPDATES, "Tell me when a new version is available"),
+        ):
+            switch = ToggleSwitch(label)
+            switch.setChecked(settings.get_bool(key))
+            self.switches[key] = switch
+            options.addWidget(switch)
+        form.addRow("Options:", options)
+
         self.error = QLabel("")
         self.error.setObjectName("formError")
         self.error.setWordWrap(True)
@@ -120,4 +137,6 @@ class SettingsDialog(QDialog):
             settings.LANGUAGE: self.language.currentData(),
             settings.MODEL: self.model.currentData(),
             settings.VOCABULARY: self.vocabulary.text().strip(),
+            **{key: "true" if switch.isChecked() else "false"
+               for key, switch in self.switches.items()},
         }
