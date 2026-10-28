@@ -28,6 +28,7 @@ MIC = "MAATA_MIC"
 VOCABULARY = "MAATA_VOCABULARY"
 AUTOPASTE = "MAATA_AUTOPASTE"
 ON_TOP = "MAATA_ON_TOP"
+CLEANUP = "MAATA_CLEANUP"
 
 DEFAULTS = {
     HOTKEY: "win+alt+space",
@@ -37,6 +38,7 @@ DEFAULTS = {
     VOCABULARY: "",    # comma-separated names/terms to spell correctly
     AUTOPASTE: "false",
     ON_TOP: "true",    # keep the window above other windows
+    CLEANUP: "false",  # tidy the text with AI: filler words, punctuation, lists
 }
 
 # (model id, description shown in Settings)

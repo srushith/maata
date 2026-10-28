@@ -45,7 +45,9 @@ Your key stays on your PC. See [Privacy](#-privacy).
 2. Press **Win + Alt + Space** and speak.
 3. Press **Win + Alt + Space** again.
 
-A few seconds later your text appears in the window. Turn on **Paste into the window I was using** to have it typed straight into the app you were in.
+While you talk, a small bar at the bottom of your screen shows that Maata is listening. Press **Esc** to cancel.
+
+A few seconds later your text appears in the window. Turn on **Paste into the window I was using** to have it typed straight into the app you were in, and **Clean up text with AI** to remove "um"s and fix punctuation.
 
 > **Tip:** close the window and Maata keeps running in the system tray (near the clock), so the shortcut works all day. If you can't see the icon, click the **^** arrow and drag the icon onto the taskbar.
 
@@ -57,6 +59,10 @@ A few seconds later your text appears in the window. Turn on **Paste into the wi
 
 - **Works in every app.** One global shortcut (**Win + Alt + Space**), from any window.
 - **Pastes where you were typing**, then restores whatever you had copied before.
+- **AI cleanup (optional).** Removes "um", "uh" and repeated words, keeps only your correction when you change your mind ("at 3, no, at 4"), fixes punctuation and turns spoken lists into bullet points.
+- **Floating recording bar** at the bottom of the screen with a timer and voice level, plus stop and cancel buttons. It never steals focus from the app you're typing in.
+- **Never lose a recording.** If the internet or OpenAI fails, the audio is kept and you can click **Retry**, even after restarting Maata.
+- **Esc cancels** a recording you don't want, so it isn't sent or billed.
 - **Accurate.** Uses OpenAI's GPT-4o transcription models and handles 50+ languages, including Hindi, Telugu, Tamil and more.
 - **Custom words.** Teach it names and jargon so they're spelled right.
 - **Lives in the tray.** The icon turns blue when ready, red while listening and amber while transcribing.
@@ -76,6 +82,8 @@ Maata itself is **free**. You only pay OpenAI for the audio you transcribe, bill
 | **GPT-4o mini Transcribe** (default, recommended) | $0.003 | ~28 hours of speech |
 | GPT-4o Transcribe (most accurate) | $0.006 | ~14 hours |
 | Whisper (original) | $0.006 | ~14 hours |
+
+**AI cleanup** (optional) uses GPT-4o mini and adds about **$0.0002 per minute**, under 10% extra.
 
 ### What that looks like (default model)
 
@@ -108,7 +116,7 @@ Click **⚙** in the window, or right-click the tray icon and choose **Settings.
 | **Model** | GPT-4o mini (default), GPT-4o or Whisper |
 | **Custom words** | Names or terms to spell correctly, e.g. `Kubernetes, Priya, Hyderabad` |
 
-In the main window, the **📌** pin keeps it above other windows, and the switch turns auto-paste on or off.
+In the main window, the **📌** pin keeps it above other windows, and the two switches turn auto-paste and AI cleanup on or off.
 
 <details>
 <summary>Why Win + Alt + Space?</summary>
@@ -142,6 +150,7 @@ If it's taken on your PC, Maata uses **Ctrl + Win + Alt + Space** instead and te
 |---|---|
 | "Windows protected your PC" | Click **More info**, then **Run anyway** (see step 2) |
 | Antivirus flags the file | A known false alarm for Python-built apps. You can check the source code here, or build it yourself (see below) |
+| "Couldn't transcribe" | Your recording is saved. Fix the problem shown (internet, credit or key), then click **Retry**. The text is copied to your clipboard |
 | "OpenAI rejected the API key" | Re-copy the key into Settings, and make sure your OpenAI account has credit |
 | "No audio was captured" or the mic glow doesn't move | Pick your mic in Settings, and check **Windows Settings → Privacy → Microphone → Let desktop apps access your microphone** |
 | The shortcut does nothing | Another app may use it. Choose a different one in Settings |
@@ -163,11 +172,13 @@ If it's taken on your PC, Maata uses **Ctrl + Win + Alt + Space** instead and te
 ### How it works
 
 ```
-Hotkey ──► record mic (16 kHz) ──► OpenAI transcription ──► show text ──► paste into the window you were in
+Hotkey ──► record mic (16 kHz) ──► OpenAI transcription ──► optional AI cleanup ──► paste into the window you were in
 ```
 
 - **Hotkey:** registered with the Windows `RegisterHotKey` API, so no keyboard hooks are needed.
 - **Audio:** recorded at 16 kHz, 16-bit mono, which is what speech models use. That's about 5× smaller than CD quality, so uploads are fast and 13 minutes fits under OpenAI's 25 MB limit.
+- **Cleanup:** an optional pass through GPT-4o mini with instructions to tidy the text without changing its meaning, or answering anything in it.
+- **Reliability:** each recording is saved to `%TEMP%\Maata` and deleted once transcribed, so a failed one can be retried. Only one copy of Maata runs at a time.
 - **Pasting:** the app remembers the window you were in, switches back to it, presses Ctrl+V and then restores your clipboard.
 
 ### Run from source
@@ -201,12 +212,13 @@ The output is `dist\Maata.exe`, a single file with no Python needed on the targe
 | `main.py` | Entry point |
 | `ui.py` | Main window, tray icon, global hotkey, recording flow |
 | `widgets.py` | Round record button, toggle switch, icons |
+| `overlay.py` | Floating recording bar |
 | `theme.py` | Light and dark colors and styles |
 | `settings_dialog.py` | Settings window |
 | `settings.py` | Loads and saves settings (`.env` from source, `%APPDATA%` for the .exe) |
 | `hotkey.py` | Hotkey parsing and defaults |
 | `recorder.py` | Microphone recording |
-| `transcriber_api.py` | OpenAI transcription, with language and custom-word hints |
+| `transcriber_api.py` | OpenAI transcription (with language and custom-word hints) and AI cleanup |
 | `typer.py` | Switches to the target window, pastes and restores the clipboard |
 | `main.spec`, `version_info.txt` | PyInstaller build settings |
 | `assets/icon.ico` | App icon |

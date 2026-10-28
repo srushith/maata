@@ -117,6 +117,18 @@ def stylesheet():
     QPushButton#ghost:hover {{ background: {c['surface_hover']}; }}
     QPushButton#ghost:disabled {{ color: {c['muted']}; }}
 
+    QPushButton#primary {{
+        background: {c['accent']};
+        border: none;
+        border-radius: 6px;
+        padding: 5px 18px;
+        font-size: 12px;
+        font-weight: 600;
+        color: white;
+    }}
+    QPushButton#primary:hover {{ background: {c['accent']}; border: 1px solid {c['text']}; }}
+    QPushButton#primary:disabled {{ background: {c['border']}; color: {c['muted']}; }}
+
     QCheckBox {{ font-size: 13px; spacing: 8px; }}
     QCheckBox::indicator {{
         width: 16px; height: 16px;

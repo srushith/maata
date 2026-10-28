@@ -1,12 +1,34 @@
+import glob
 import os
 import tempfile
+import time
 import wave
 
 import numpy as np
 import sounddevice as sd
 
-# Recordings go to the temp folder, which is always writable.
-DEFAULT_FILE = os.path.join(tempfile.gettempdir(), "maata_recording.wav")
+# Recordings go to a folder in temp, which is always writable. Each recording
+# is deleted once it's transcribed; one that fails is kept so it can be retried.
+RECORDINGS_DIR = os.path.join(tempfile.gettempdir(), "Maata")
+
+
+def new_recording_path():
+    os.makedirs(RECORDINGS_DIR, exist_ok=True)
+    return os.path.join(RECORDINGS_DIR, time.strftime("recording-%Y%m%d-%H%M%S.wav"))
+
+
+def unsent_recordings():
+    """Saved recordings that were never transcribed, newest first."""
+    files = glob.glob(os.path.join(RECORDINGS_DIR, "recording-*.wav"))
+    return sorted(files, key=os.path.getmtime, reverse=True)
+
+
+def delete_recording(path):
+    try:
+        if path and os.path.exists(path):
+            os.remove(path)
+    except OSError:
+        pass
 
 is_recording = False
 current_level = 0.0  # loudness of the latest audio chunk, 0.0 to 1.0
@@ -48,9 +70,15 @@ def _find_device(name):
     return None  # not plugged in any more: use the system default
 
 
-def record_audio(filename=DEFAULT_FILE, mic_name=""):
-    global is_recording, current_level
+def begin_recording():
+    """Mark recording as started. Call before record_audio, so a quick stop isn't missed."""
+    global is_recording
     is_recording = True
+
+
+def record_audio(filename, mic_name=""):
+    """Record until stop_recording() is called. Call begin_recording() first."""
+    global current_level
     current_level = 0.0
     recording = []
     device = _find_device(mic_name) if mic_name else None

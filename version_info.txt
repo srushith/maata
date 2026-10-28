@@ -1,14 +1,14 @@
 # Version details shown in the .exe's Properties > Details tab.
 VSVersionInfo(
-  ffi=FixedFileInfo(filevers=(1, 0, 0, 0), prodvers=(1, 0, 0, 0)),
+  ffi=FixedFileInfo(filevers=(1, 1, 0, 0), prodvers=(1, 1, 0, 0)),
   kids=[
     StringFileInfo([StringTable('040904B0', [
       StringStruct('FileDescription', 'Maata - voice typing for Windows'),
-      StringStruct('FileVersion', '1.0.0'),
+      StringStruct('FileVersion', '1.1.0'),
       StringStruct('InternalName', 'Maata'),
       StringStruct('OriginalFilename', 'Maata.exe'),
       StringStruct('ProductName', 'Maata'),
-      StringStruct('ProductVersion', '1.0.0'),
+      StringStruct('ProductVersion', '1.1.0'),
     ])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])]),
   ]

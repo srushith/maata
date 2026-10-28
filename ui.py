@@ -1,26 +1,33 @@
 import ctypes
 import ctypes.wintypes
+import getpass
 import math
+import os
+import re
 
 from PyQt5.QtWidgets import (
     QAction, QApplication, QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox,
     QPlainTextEdit, QPushButton, QSystemTrayIcon, QToolButton, QVBoxLayout, QWidget,
 )
 from PyQt5.QtCore import QElapsedTimer, QSize, Qt, QThread, QTimer, pyqtSignal
+from PyQt5.QtNetwork import QLocalServer, QLocalSocket
 
 import settings
 import recorder
 import theme
 from theme import COLORS
-from hotkey import get_hotkey_candidates
+from hotkey import MOD_NOREPEAT, get_hotkey_candidates
+from overlay import RecordingPill
 from settings_dialog import SettingsDialog
-from transcriber_api import transcribe_audio
+from transcriber_api import clean_up, transcribe_audio
 from typer import get_foreground_window, is_paste_target, paste_text
 from widgets import RecordButton, ToggleSwitch, make_icon, make_pin_icon
 
 APP_ID = "Maata.App"  # lets Windows show our own taskbar icon instead of Python's
 HOTKEY_ID = 1
+CANCEL_ID = 2  # Esc, only registered while recording
 WM_HOTKEY = 0x0312
+VK_ESCAPE = 0x1B
 MAX_SECONDS = 13 * 60  # OpenAI's 25 MB limit is about 13.5 minutes at 16 kHz
 
 user32 = ctypes.windll.user32
@@ -47,19 +54,51 @@ class PasteWorker(QThread):
 
 
 class Worker(QThread):
-    finished = pyqtSignal(str, str)  # (text, error)
+    """Records (unless retrying a saved recording), transcribes and tidies up."""
+    stage = pyqtSignal(str)
+    finished = pyqtSignal(str, str, bool, str)  # (text, error, can_retry, note)
 
-    def __init__(self, mic_name):
+    def __init__(self, filename, mic_name="", record=True):
         super().__init__()
+        self.filename = filename
         self.mic_name = mic_name
+        self.record = record
+        self.cancelled = False
 
     def run(self):
+        if self.record:
+            try:
+                recorder.record_audio(self.filename, self.mic_name)
+            except Exception as e:
+                recorder.delete_recording(self.filename)
+                self.finished.emit("", "" if self.cancelled else str(e), False, "")
+                return
+            if self.cancelled:
+                recorder.delete_recording(self.filename)
+                self.finished.emit("", "", False, "")
+                return
+
+        self.stage.emit("Transcribing")
         try:
-            filename = recorder.record_audio(mic_name=self.mic_name)
-            text = (transcribe_audio(filename) or "").strip()
-            self.finished.emit(text, "" if text else "No speech was recognised.")
+            text = (transcribe_audio(self.filename) or "").strip()
         except Exception as e:
-            self.finished.emit("", str(e))
+            # Keep the recording so the user can try again.
+            self.finished.emit("", str(e), True, "")
+            return
+        if not text:
+            recorder.delete_recording(self.filename)
+            self.finished.emit("", "No speech was recognised.", False, "")
+            return
+
+        note = ""
+        if settings.get_bool(settings.CLEANUP):
+            self.stage.emit("Cleaning up")
+            try:
+                text = clean_up(text)
+            except Exception as e:
+                note = f"AI cleanup skipped ({e}). Showing the plain transcript."
+        recorder.delete_recording(self.filename)
+        self.finished.emit(text, "", False, note)
 
 
 class MaataUI(QWidget):
@@ -75,7 +114,9 @@ class MaataUI(QWidget):
         self.target_hwnd = None         # window to paste into for this recording
         self.last_external_hwnd = None  # last app window the user used
         self.hotkey_registered = False
+        self.cancel_key_registered = False
         self.hotkey_label = ""
+        self.pending_file = None        # a recording that failed to transcribe
         self.elapsed = QElapsedTimer()
 
         self.icons = {
@@ -86,6 +127,11 @@ class MaataUI(QWidget):
 
         self.init_ui()
         self.init_tray()
+
+        self.pill = RecordingPill()
+        self.pill.stop_clicked.connect(self.toggle_recording)
+        self.pill.cancel_clicked.connect(self.cancel_recording)
+        self.pill.open_clicked.connect(self.show_window)
 
         # Remember which app the user was in, so clicking our button or the
         # tray still pastes back into that app.
@@ -101,6 +147,7 @@ class MaataUI(QWidget):
         self.set_state("idle")
         if problem:
             self.set_hint(problem, error=True)
+        self.recover_unsent_recording()
         if not settings.has_api_key():
             # First run: ask for the OpenAI key straight away.
             self.set_hint("Add your OpenAI API key in Settings to get started.", error=True)
@@ -118,8 +165,8 @@ class MaataUI(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setWindowTitle("Maata")
         self.setWindowIcon(self.icons["idle"])
-        self.resize(420, 560)
-        self.setMinimumSize(360, 460)
+        self.resize(420, 600)
+        self.setMinimumSize(360, 500)
         on_top = settings.get_bool(settings.ON_TOP)
         self.setWindowFlags(self.window_flags(on_top))
 
@@ -161,6 +208,24 @@ class MaataUI(QWidget):
         self.hint.setObjectName("hint")
         self.hint.setAlignment(Qt.AlignCenter)
         self.hint.setWordWrap(True)
+
+        # Shown when a recording couldn't be transcribed, so it isn't lost.
+        self.retry_button = QPushButton("Retry")
+        self.retry_button.setObjectName("primary")
+        self.retry_button.setCursor(Qt.PointingHandCursor)
+        self.retry_button.clicked.connect(self.retry_recording)
+        self.discard_button = QPushButton("Discard")
+        self.discard_button.setObjectName("ghost")
+        self.discard_button.setCursor(Qt.PointingHandCursor)
+        self.discard_button.clicked.connect(self.discard_recording)
+        self.retry_row = QWidget()
+        retry_layout = QHBoxLayout(self.retry_row)
+        retry_layout.setContentsMargins(0, 8, 0, 0)
+        retry_layout.addStretch()
+        retry_layout.addWidget(self.retry_button)
+        retry_layout.addWidget(self.discard_button)
+        retry_layout.addStretch()
+        self.retry_row.hide()
 
         # Transcript card
         self.text_box = QPlainTextEdit()
@@ -205,6 +270,14 @@ class MaataUI(QWidget):
         self.checkbox.toggled.connect(
             lambda on: settings.save({settings.AUTOPASTE: "true" if on else "false"}))
 
+        self.cleanup_switch = ToggleSwitch("Clean up text with AI")
+        self.cleanup_switch.setToolTip(
+            "Removes um/uh and repeated words, fixes punctuation and formats lists.\n"
+            "Adds well under a cent per recording.")
+        self.cleanup_switch.setChecked(settings.get_bool(settings.CLEANUP))
+        self.cleanup_switch.toggled.connect(
+            lambda on: settings.save({settings.CLEANUP: "true" if on else "false"}))
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 18)
         layout.setSpacing(0)
@@ -215,10 +288,13 @@ class MaataUI(QWidget):
         layout.addWidget(self.status)
         layout.addSpacing(4)
         layout.addWidget(self.hint)
+        layout.addWidget(self.retry_row)
         layout.addSpacing(18)
         layout.addWidget(card, stretch=1)
         layout.addSpacing(12)
         layout.addWidget(self.checkbox)
+        layout.addSpacing(4)
+        layout.addWidget(self.cleanup_switch)
 
         self.update_word_count()
 
@@ -259,12 +335,23 @@ class MaataUI(QWidget):
         self.status.setText(status)
         self.set_hint(hint)
         self.settings_button.setEnabled(state == "idle")
+        self.update_retry_controls()
         if self.tray:
             self.tray.setIcon(self.icons[state])
             self.tray.setToolTip(tooltip)
             self.record_action.setText(
                 "Stop recording" if state == "recording" else "Start recording")
             self.record_action.setEnabled(state != "processing")
+
+    def update_retry_controls(self):
+        has_pending = bool(self.pending_file) and os.path.exists(self.pending_file)
+        idle = self.is_idle()
+        self.retry_row.setVisible(has_pending)
+        self.retry_button.setEnabled(idle)
+        self.discard_button.setEnabled(idle)
+        if self.tray:
+            self.retry_action.setVisible(has_pending)
+            self.retry_action.setEnabled(idle)
 
     def update_word_count(self):
         words = len(self.text_box.toPlainText().split())
@@ -284,11 +371,14 @@ class MaataUI(QWidget):
         if self.hotkey_registered:
             user32.UnregisterHotKey(int(self.winId()), HOTKEY_ID)
             self.hotkey_registered = False
+        self.release_cancel_key()
         visible = self.isVisible()
         self.setWindowFlags(self.window_flags(on))
         if visible:
             self.show()
         problem = self.register_hotkey()
+        if self.is_recording:
+            self.grab_cancel_key()
         if problem and self.is_idle():
             self.set_hint(problem, error=True)
         self.update_pin_tooltip()
@@ -310,13 +400,16 @@ class MaataUI(QWidget):
         menu = QMenu()
         self.record_action = QAction("Start recording", self)
         self.record_action.triggered.connect(self.toggle_recording)
+        self.retry_action = QAction("Retry last recording", self)
+        self.retry_action.triggered.connect(self.retry_recording)
+        self.retry_action.setVisible(False)
         show_action = QAction("Show window", self)
         show_action.triggered.connect(self.show_window)
         settings_action = QAction("Settings...", self)
         settings_action.triggered.connect(self.open_settings)
         quit_action = QAction("Quit", self)
         quit_action.triggered.connect(self.quit_app)
-        for action in (self.record_action, show_action, settings_action):
+        for action in (self.record_action, self.retry_action, show_action, settings_action):
             menu.addAction(action)
         menu.addSeparator()
         menu.addAction(quit_action)
@@ -361,8 +454,10 @@ class MaataUI(QWidget):
         if self.hotkey_registered:
             user32.UnregisterHotKey(int(self.winId()), HOTKEY_ID)
             self.hotkey_registered = False
+        self.release_cancel_key()
         if self.is_recording:
             recorder.stop_recording()
+        self.pill.hide_pill()
         if self.tray:
             self.tray.hide()
 
@@ -390,7 +485,27 @@ class MaataUI(QWidget):
             if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
                 self.toggle_recording()
                 return True, 0
+            if msg.message == WM_HOTKEY and msg.wParam == CANCEL_ID:
+                self.cancel_recording()
+                return True, 0
         return super().nativeEvent(event_type, message)
+
+    def grab_cancel_key(self):
+        """Make Esc cancel the recording from any app (only while recording)."""
+        if not self.cancel_key_registered:
+            self.cancel_key_registered = bool(
+                user32.RegisterHotKey(int(self.winId()), CANCEL_ID, MOD_NOREPEAT, VK_ESCAPE))
+
+    def release_cancel_key(self):
+        if self.cancel_key_registered:
+            user32.UnregisterHotKey(int(self.winId()), CANCEL_ID)
+            self.cancel_key_registered = False
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape and self.is_recording:
+            self.cancel_recording()
+            return
+        super().keyPressEvent(event)
 
     # ---- Settings -------------------------------------------------------
 
@@ -448,11 +563,18 @@ class MaataUI(QWidget):
         self.is_recording = True
         self.elapsed.start()
         self.set_state("recording")
+        self.pill.show_recording()
+        self.grab_cancel_key()
         self.update_recording_status()
         self.record_timer.start(50)
-        self.worker = Worker(settings.get(settings.MIC))
-        self.worker.finished.connect(self.on_finished)
-        self.worker.start()
+        recorder.begin_recording()
+        self.start_worker(Worker(recorder.new_recording_path(), settings.get(settings.MIC)))
+
+    def start_worker(self, worker):
+        self.worker = worker
+        worker.stage.connect(self.on_stage)
+        worker.finished.connect(self.on_finished)
+        worker.start()
 
     def update_recording_status(self):
         if not self.is_recording:
@@ -463,7 +585,8 @@ class MaataUI(QWidget):
             return
         self.status.setText(f"Listening  {format_time(seconds)}")
         stop = f"Press {self.hotkey_label} or click to stop" if self.hotkey_registered else "Click to stop"
-        self.hint.setText(stop)
+        self.hint.setText(f"{stop}. Esc cancels.")
+        self.pill.set_time(format_time(seconds))
         if self.tray:
             self.tray.setToolTip(f"Maata: recording {format_time(seconds)}")
         # Loudness on a log scale (-55 dB to -10 dB) so normal speech moves the halo well.
@@ -473,43 +596,137 @@ class MaataUI(QWidget):
             db = 20 * math.log10(level)
             value = (db + 55) / 45
         self.record_button.set_level(value)
+        self.pill.set_level(value)
 
     def stop_recording(self, hint=None):
         self.is_recording = False
         self.is_processing = True
         self.record_timer.stop()
+        self.release_cancel_key()
         self.set_state("processing", hint=hint)
+        self.pill.show_processing()
         try:
             recorder.stop_recording()
         except Exception:
             pass
 
-    def on_finished(self, text, error):
+    def cancel_recording(self):
+        """Throw the recording away without transcribing it (Esc)."""
+        if not self.is_recording:
+            return
+        self.worker.cancelled = True
+        self.is_recording = False
+        self.record_timer.stop()
+        self.release_cancel_key()
+        recorder.stop_recording()
+        self.worker.wait(3000)  # let the mic close before anything else starts
+        self.pill.hide_pill()
+        self.set_state("idle", "Cancelled")
+        QTimer.singleShot(1500, lambda: self.is_idle() and self.status.text() == "Cancelled"
+                          and self.set_state("idle"))
+
+    def on_stage(self, stage):
+        if self.is_processing:
+            self.status.setText(stage)
+            self.pill.show_processing(stage)
+
+    def on_finished(self, text, error, can_retry, note):
+        worker = self.sender()
+        if worker is not None and worker.cancelled:
+            return
         self.is_recording = False
         self.is_processing = False
+        self.record_timer.stop()
+        self.release_cancel_key()
+        retried = worker is not None and not worker.record
 
         if error:
-            self.set_state("idle", "Something went wrong")
+            if can_retry:
+                if self.pending_file and self.pending_file != worker.filename:
+                    recorder.delete_recording(self.pending_file)
+                self.pending_file = worker.filename
+            self.set_state("idle", "Couldn't transcribe" if can_retry else "Something went wrong")
             self.set_hint(error, error=True)
-            if not self.isVisible():
-                self.show_window()  # make sure the user sees what went wrong
+            self.pill.show_error("Couldn't transcribe. Click for details."
+                                 if can_retry else "Something went wrong. Click for details.")
             return
 
+        if retried:
+            self.pending_file = None
         self.text_box.setPlainText(text)
         self.set_state("idle", "Done")
+        if note:
+            self.set_hint(note, error=True)
 
-        if self.checkbox.isChecked():
-            self.set_hint("Pasting...")
+        if retried:
+            # The original window may be long gone, so copy instead of pasting.
+            QApplication.clipboard().setText(text)
+            if not note:
+                self.set_hint("Copied to the clipboard. Press Ctrl+V where you want it.")
+            self.pill.show_done("Copied to clipboard")
+        elif self.checkbox.isChecked():
+            self.pill.show_processing("Pasting")
             self.paste_worker = PasteWorker(text, self.target_hwnd)
-            self.paste_worker.done.connect(self.on_pasted)
+            self.paste_worker.done.connect(lambda message: self.on_pasted(message, note))
             self.paste_worker.start()
+        else:
+            self.pill.show_done("Done. Text is in Maata")
 
-    def on_pasted(self, message):
-        ok = message.startswith("Pasted")
-        if ok:
+    def on_pasted(self, message, note=""):
+        if message.startswith("Pasted"):
             self.set_state("idle", "Pasted")
+            if note:
+                self.set_hint(note, error=True)
+            self.pill.show_done("Pasted")
         else:
             self.set_hint(message, error=True)
+            self.pill.show_error("Couldn't paste. Press Ctrl+V.")
+
+    # ---- Saved recordings -------------------------------------------------
+
+    def recover_unsent_recording(self):
+        """Offer to retry a recording left over from last time (e.g. after a crash)."""
+        files = recorder.unsent_recordings()
+        for old in files[1:]:
+            recorder.delete_recording(old)
+        if files:
+            self.pending_file = files[0]
+            self.set_hint("A recording from last time wasn't transcribed.", error=True)
+        self.update_retry_controls()
+
+    def retry_recording(self):
+        if not self.is_idle() or not self.pending_file:
+            return
+        if not os.path.exists(self.pending_file):
+            self.pending_file = None
+            self.update_retry_controls()
+            return
+        self.is_processing = True
+        self.set_state("processing", hint="Trying again")
+        self.pill.show_processing()
+        self.start_worker(Worker(self.pending_file, record=False))
+
+    def discard_recording(self):
+        if not self.is_idle():
+            return
+        recorder.delete_recording(self.pending_file)
+        self.pending_file = None
+        self.set_state("idle", "Recording discarded")
+
+
+SERVER_NAME = "Maata-" + re.sub(r"[^A-Za-z0-9_-]", "_", getpass.getuser())
+
+
+def tell_running_copy_to_show():
+    """If Maata is already running, ask it to show its window. Returns True if it was."""
+    socket = QLocalSocket()
+    socket.connectToServer(SERVER_NAME)
+    if not socket.waitForConnected(500):
+        return False
+    socket.write(b"show")
+    socket.waitForBytesWritten(500)
+    socket.disconnectFromServer()
+    return True
 
 
 def launch_ui():
@@ -522,8 +739,24 @@ def launch_ui():
     app.setStyle("Fusion")
     app.setStyleSheet(theme.stylesheet())
     app.setQuitOnLastWindowClosed(False)
+
+    # Only one copy runs at a time; opening it again just brings up the window.
+    if tell_running_copy_to_show():
+        return
+    server = QLocalServer()
+    QLocalServer.removeServer(SERVER_NAME)
+    server.listen(SERVER_NAME)
+
     window = MaataUI()
     app.setWindowIcon(window.icons["idle"])
+
+    def on_connection():
+        connection = server.nextPendingConnection()
+        if connection:
+            connection.disconnectFromServer()
+        window.show_window()
+
+    server.newConnection.connect(on_connection)
     window.show()
     app.exec_()
 
