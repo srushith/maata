@@ -47,6 +47,10 @@ Your key stays on your PC. See [Privacy](#-privacy).
 
 While you talk, a small bar at the bottom of your screen shows that Maata is listening. Press **Esc** to cancel.
 
+<p align="center">
+  <img src="docs/floating-bar.png" width="236" alt="The floating bar while recording, cleaning up and after pasting">
+</p>
+
 A few seconds later your text appears in the window. Turn on **Paste into the window I was using** to have it typed straight into the app you were in, and **Clean up text with AI** to remove "um"s and fix punctuation.
 
 > **Tip:** close the window and Maata keeps running in the system tray (near the clock), so the shortcut works all day. If you can't see the icon, click the **^** arrow and drag the icon onto the taskbar.
