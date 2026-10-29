@@ -6,6 +6,8 @@
 
 Powered by OpenAI's speech recognition. Typical use costs **under $2 a month**, and you pay OpenAI directly with no subscription.
 
+**A no-subscription alternative to Wispr Flow.** Like Flow, it types what you meant, not every "um" and "no wait" you said. Instead of $12–15 a month, you pay OpenAI only for the minutes you use.
+
 <p align="center">
   <img src="docs/recording-light.png" width="300" alt="Maata while recording">
   &nbsp;&nbsp;
