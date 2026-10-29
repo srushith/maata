@@ -18,19 +18,23 @@ Powered by OpenAI's speech recognition. Typical use costs **under $2 a month**, 
 
 ## ⬇️ Download and start in 3 minutes
 
-### 1. Download
+### 1. Install
 
-**[Download Maata.exe](../../releases/latest/download/Maata.exe)** (Windows 10 or 11, about 58 MB)
+**Recommended: get it from the Microsoft Store.** It installs without any security warning, adds Maata to your Start menu, and updates itself.
 
-No installer. It's a single file you can run from anywhere.
+<a href="https://apps.microsoft.com/detail/9P6DPFJLN0HL?mode=direct"><img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft"></a>
 
-### 2. Open it
+Then open **Maata** from the Start menu.
 
-Double-click `Maata.exe`.
+<details>
+<summary><b>Or download the .exe from GitHub</b> (no Store needed)</summary>
 
-Windows may show **"Windows protected your PC"**. That's normal for free apps from independent developers that haven't paid for a code-signing certificate. Click **More info**, then **Run anyway**.
+**[Download Maata.exe](../../releases/latest/download/Maata.exe)** (Windows 10 or 11, about 58 MB). It's a single file you can run from anywhere, with no installer. Double-click it to open.
 
-### 3. Add your OpenAI API key
+Windows may show **"Windows protected your PC"** because the .exe isn't code-signed yet. Click **More info**, then **Run anyway**.
+</details>
+
+### 2. Add your OpenAI API key
 
 The first time it opens, Maata asks for an OpenAI API key, which is how you pay for the speech recognition.
 
@@ -41,7 +45,7 @@ The first time it opens, Maata asks for an OpenAI API key, which is how you pay 
 
 Your key stays on your PC. See [Privacy](#-privacy).
 
-### 4. Dictate
+### 3. Dictate
 
 1. Click into any text box, anywhere.
 2. Press **Win + Alt + Space** and speak.
@@ -57,7 +61,9 @@ A few seconds later your text appears in the window. Turn on **Paste into the wi
 
 > **Tip:** close the window and Maata keeps running in the system tray (near the clock), so the shortcut works all day. If you can't see the icon, click the **^** arrow and drag the icon onto the taskbar.
 
-> **Tip:** to start it with Windows, press **Win + R**, type `shell:startup`, press Enter, and put a shortcut to `Maata.exe` in that folder.
+> **Tip:** to start it with Windows, press **Win + R**, type `shell:startup` and press Enter. Then add Maata to that folder:
+> - **Store version:** press **Win + R** again, type `shell:AppsFolder`, and drag **Maata** into the startup folder.
+> - **.exe version:** put a shortcut to `Maata.exe` there.
 
 ---
 
@@ -72,7 +78,7 @@ A few seconds later your text appears in the window. Turn on **Paste into the wi
 - **Skips long pauses** before uploading, so you don't pay for silence while you think.
 - **History** of your last 10 transcripts, so you can copy an earlier one again. It's kept only on your PC.
 - **Start and stop sounds**, so you know it heard the shortcut without looking.
-- **Update notice** when a new version is out.
+- **Stays up to date.** The Store version updates itself, and the .exe tells you when a new version is out.
 - **Accurate.** Uses OpenAI's GPT-4o transcription models and handles 50+ languages, including Hindi, Telugu, Tamil and more.
 - **Custom words.** Teach it names and jargon so they're spelled right.
 - **Lives in the tray.** The icon turns blue when ready, red while listening and amber while transcribing.
@@ -135,7 +141,7 @@ Click **⚙** in the window, or right-click the tray icon and choose **Settings.
 | **Sounds** | A soft sound when recording starts and stops. Default: on |
 | **Skip long pauses** | Cuts pauses longer than about half a second before uploading, which makes it cheaper. Default: on |
 | **History** | Remembers your last 10 transcripts on this PC. Turning it off deletes the saved ones. Default: on |
-| **Update notice** | Tells you when a new version is on GitHub. Default: on |
+| **Update notice** | Tells you when a new version is on GitHub. Only in the .exe, since the Store updates Maata itself. Default: on |
 
 In the main window, the **📌** pin keeps it above other windows, the **🕘** clock button opens your History, and the two switches turn auto-paste and AI cleanup on or off.
 
@@ -159,9 +165,9 @@ If it's taken on your PC, Maata uses **Ctrl + Win + Alt + Space** instead and te
 ## 🔒 Privacy
 
 - Your recording goes **directly from your PC to OpenAI** to be transcribed. There's no other server in between.
-- Your API key and settings are stored only on your PC, in `%APPDATA%\Maata\settings.env`.
+- Your API key and settings are stored only on your PC, in `%APPDATA%\Maata\settings.env`. The Store version keeps them in its own private app folder instead.
 - Your last 10 transcripts are saved only on your PC, in `%APPDATA%\Maata\history.json`. You can clear them in **History**, or turn history off in Settings.
-- Maata has no analytics, tracking or accounts. The only other connection it makes is a once-a-day check with GitHub for a newer version, which sends nothing about you. You can turn that off in Settings.
+- Maata has no analytics, tracking or accounts. The only other connection the .exe makes is a once-a-day check with GitHub for a newer version, which sends nothing about you. You can turn that off in Settings. The Store version doesn't make this check.
 - OpenAI's API doesn't use your audio to train its models by default. See [OpenAI's data policy](https://openai.com/enterprise-privacy/).
 
 ---
@@ -183,8 +189,8 @@ See [Privacy](#-privacy) for what data Maata sends and where.
 
 | Problem | Fix |
 |---|---|
-| "Windows protected your PC" | Click **More info**, then **Run anyway** (see step 2) |
-| Antivirus flags the file | A known false alarm for Python-built apps. You can check the source code here, or build it yourself (see below) |
+| "Windows protected your PC" | Install from the [Microsoft Store](https://apps.microsoft.com/detail/9P6DPFJLN0HL) instead, or click **More info**, then **Run anyway** |
+| Antivirus flags the .exe | A known false alarm for Python-built apps. Use the Microsoft Store version, which Microsoft checks and signs, or check the source code here and build it yourself (see below) |
 | "Couldn't transcribe" | Your recording is saved. Fix the problem shown (internet, credit or key), then click **Retry**. The text is copied to your clipboard |
 | "OpenAI rejected the API key" | Re-copy the key into Settings, and make sure your OpenAI account has credit |
 | "No audio was captured" or the mic glow doesn't move | Pick your mic in Settings, and check **Windows Settings → Privacy → Microphone → Let desktop apps access your microphone** |
@@ -196,6 +202,9 @@ See [Privacy](#-privacy) for what data Maata sends and where.
 
 ## 🗑️ Uninstall
 
+**Store version:** open **Settings → Apps → Installed apps**, click **⋯** next to Maata, and choose **Uninstall**. This also removes its settings and history.
+
+**.exe version:**
 1. Right-click the tray icon and choose **Quit**.
 2. Delete `Maata.exe`.
 3. Optionally, delete your saved settings and history: press **Win + R**, type `%APPDATA%\Maata`, and delete that folder.
@@ -241,6 +250,14 @@ pyinstaller main.spec
 
 The output is `dist\Maata.exe`, a single file with no Python needed on the target PC.
 
+To build the Microsoft Store package as well (needs the Windows SDK):
+
+```powershell
+python packaging/make_msix.py
+```
+
+This makes `dist\Maata-<version>.msix`. GitHub Actions builds both files whenever a `v*` tag is pushed (see `.github/workflows/build.yml`).
+
 ### Project structure
 
 | File | Purpose |
@@ -260,6 +277,7 @@ The output is `dist\Maata.exe`, a single file with no Python needed on the targe
 | `updater.py`, `version.py` | Version number and the check for new releases |
 | `typer.py` | Switches to the target window, pastes and restores the clipboard |
 | `main.spec`, `version_info.txt` | PyInstaller build settings |
+| `packaging/make_msix.py` | Builds the Microsoft Store package (logos, manifest, .msix) |
 | `assets/icon.ico` | App icon |
 | `docs/` | Screenshots for this README |
 
