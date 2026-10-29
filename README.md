@@ -165,7 +165,7 @@ If it's taken on your PC, Maata uses **Ctrl + Win + Alt + Space** instead and te
 ## 🔒 Privacy
 
 - Your recording goes **directly from your PC to OpenAI** to be transcribed. There's no other server in between.
-- Your API key and settings are stored only on your PC, in `%APPDATA%\Maata\settings.env`. The Store version keeps them in its own private app folder instead.
+- Your API key and settings are stored only on your PC, in `%APPDATA%\Maata\settings.env`. The Store version keeps them in its own private app folder, unless you used the .exe on that PC before, in which case it reuses the same folder and settings.
 - Your last 10 transcripts are saved only on your PC, in `%APPDATA%\Maata\history.json`. You can clear them in **History**, or turn history off in Settings.
 - Maata has no analytics, tracking or accounts. The only other connection the .exe makes is a once-a-day check with GitHub for a newer version, which sends nothing about you. You can turn that off in Settings. The Store version doesn't make this check.
 - OpenAI's API doesn't use your audio to train its models by default. See [OpenAI's data policy](https://openai.com/enterprise-privacy/).
@@ -202,7 +202,7 @@ See [Privacy](#-privacy) for what data Maata sends and where.
 
 ## 🗑️ Uninstall
 
-**Store version:** open **Settings → Apps → Installed apps**, click **⋯** next to Maata, and choose **Uninstall**. This also removes its settings and history.
+**Store version:** open **Settings → Apps → Installed apps**, click **⋯** next to Maata, and choose **Uninstall**. This also removes its settings and history. If you used the .exe on that PC before, also delete `%APPDATA%\Maata` as in step 3 below.
 
 **.exe version:**
 1. Right-click the tray icon and choose **Quit**.
