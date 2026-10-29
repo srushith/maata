@@ -164,6 +164,19 @@ If it's taken on your PC, Maata uses **Ctrl + Win + Alt + Space** instead and te
 
 ---
 
+## ✍️ Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- **Committers and reviewers:** [srushith](https://github.com/srushith)
+- **Approvers:** [srushith](https://github.com/srushith)
+
+Every signed release is built from this repository's source by GitHub Actions. Nothing built on a personal PC is signed.
+
+See [Privacy](#-privacy) for what data Maata sends and where.
+
+---
+
 ## 🛠️ Troubleshooting
 
 | Problem | Fix |
