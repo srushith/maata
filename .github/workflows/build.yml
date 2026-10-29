@@ -1,0 +1,42 @@
+# Builds Maata.exe on GitHub's servers so SignPath can verify and sign it.
+# Runs when a version tag (e.g. v1.2.1) is pushed, or by hand from the Actions tab.
+name: Build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: >
+          pip install
+          PyQt5==5.15.11 sounddevice==0.5.3 numpy==2.3.3 openai==2.6.1
+          pyperclip==1.11.0 pywin32==311 python-dotenv==1.2.1
+          pyinstaller==6.16.0
+
+      - name: Build Maata.exe
+        run: pyinstaller main.spec
+
+      - name: Upload unsigned build
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Maata-unsigned
+          path: dist/Maata.exe
+          if-no-files-found: error
+
+      # Signing step goes here once SignPath Foundation approves the project.
+      # They provide the organization ID, project slug and policy name.
