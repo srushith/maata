@@ -7,6 +7,7 @@ import settings
 import theme
 from hotkey import parse_hotkey
 from recorder import list_microphones
+from updater import installed_from_store
 from widgets import ToggleSwitch
 
 
@@ -88,6 +89,8 @@ class SettingsDialog(QDialog):
             (settings.HISTORY, "Remember my last 10 transcripts"),
             (settings.CHECK_UPDATES, "Tell me when a new version is available"),
         ):
+            if key == settings.CHECK_UPDATES and installed_from_store():
+                continue  # the Store handles updates
             switch = ToggleSwitch(label)
             switch.setChecked(settings.get_bool(key))
             self.switches[key] = switch

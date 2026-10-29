@@ -38,5 +38,15 @@ jobs:
           path: dist/Maata.exe
           if-no-files-found: error
 
+      - name: Build Microsoft Store package
+        run: python packaging/make_msix.py
+
+      - name: Upload Store package
+        uses: actions/upload-artifact@v7
+        with:
+          name: Maata-msix
+          path: dist/*.msix
+          if-no-files-found: error
+
       # Signing step goes here once SignPath Foundation approves the project.
       # They provide the organization ID, project slug and policy name.

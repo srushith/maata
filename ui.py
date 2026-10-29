@@ -597,7 +597,7 @@ class MaataUI(QWidget):
     # ---- Updates and sounds ---------------------------------------------
 
     def check_for_updates(self):
-        if not settings.get_bool(settings.CHECK_UPDATES):
+        if not settings.get_bool(settings.CHECK_UPDATES) or updater.installed_from_store():
             return
         if self.update_checker and self.update_checker.isRunning():
             return
